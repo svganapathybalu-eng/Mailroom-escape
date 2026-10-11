@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WORD UNTANGLE: Buzzer Showdown</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts for Game-show feel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;900&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+  <!-- QR Code Generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Confetti Canvas -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Outfit"', 'sans-serif'],
+            display: ['"Space Grotesk"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            arenaBg: '#060814',
+            arenaCard: '#0f1426',
+            teamRed: '#ff2d55',
+            teamBlue: '#00c7fd',
+            teamGreen: '#10e760',
+            teamYellow: '#ffb800',
+          },
+          boxShadow: {
+            glowRed: '0 0 30px rgba(255, 45, 85, 0.6)',
+            glowBlue: '0 0 30px rgba(0, 199, 253, 0.6)',
+            glowGreen: '0 0 30px rgba(16, 231, 96, 0.6)',
+            glowYellow: '0 0 30px rgba(255, 184, 0, 0.6)',
+            buzzerActive: '0 0 50px rgba(255, 255, 255, 0.8), inset 0 0 25px rgba(255, 255, 255, 0.6)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #060814;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(255, 45, 85, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 15%, rgba(0, 199, 253, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 50% 85%, rgba(16, 231, 96, 0.06) 0%, transparent 50%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.03); opacity: 0.9; }
+    }
+    .buzzer-pulsing {
+      animation: pulseGlow 1.2s infinite ease-in-out;
+    }
+    .letter-tile {
+      perspective: 1000px;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .letter-tile:hover {
+      transform: translateY(-4px) scale(1.04);
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between overflow-x-hidden">
+
+  <!-- ========================================== -->
+  <!-- SCREEN 1: WELCOME & ROLE SELECTOR ROUTER   -->
+  <!-- ========================================== -->
+  <div id="view-router" class="flex-1 flex flex-col items-center justify-center p-4 min-h-screen">
+    <div class="w-full max-w-md bg-arenaCard/95 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-center space-y-6">
+      <div class="inline-flex p-3 rounded-2xl bg-gradient-to-tr from-teamRed via-teamYellow to-teamBlue shadow-lg">
+        <span class="text-4xl">⚡</span>
+      </div>
+      <div>
+        <h1 class="font-display font-black text-3xl sm:text-4xl tracking-wider text-white">WORD UNTANGLE</h1>
+        <p class="text-xs font-mono uppercase tracking-widest text-slate-400 mt-1">Multiplayer Buzzer Showdown</p>
+      </div>
+
+      <div class="space-y-3 pt-2">
+        <button onclick="startAsHost()" class="w-full p-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:brightness-110 font-display font-black text-base text-white tracking-wider shadow-glowBlue transition-all flex items-center justify-center gap-3">
+          <span>🖥️</span>
+          <span>HOST / PROJECTOR MODE</span>
+        </button>
+        <p class="text-[11px] text-slate-400">Put this on the classroom projector screen.</p>
+        
+        <div class="relative py-2 flex items-center justify-center">
+          <div class="w-full border-t border-slate-800"></div>
+          <span class="absolute px-3 bg-arenaCard text-[10px] font-mono text-slate-500 uppercase">OR JOIN VIA PHONE</span>
+        </div>
+
+        <button onclick="showPlayerJoinForm()" class="w-full p-4 rounded-2xl bg-gradient-to-r from-teamRed to-pink-600 hover:brightness-110 font-display font-black text-base text-white tracking-wider shadow-glowRed transition-all flex items-center justify-center gap-3">
+          <span>📱</span>
+          <span>JOIN AS A TEAM BUZZER</span>
+        </button>
+        <p class="text-[11px] text-slate-400">For students joining from mobile phones.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SCREEN 2: PLAYER / BUZZER CONTROLLER VIEW -->
+  <!-- ========================================== -->
+  <div id="view-player" class="hidden flex-1 flex flex-col justify-between p-4 min-h-screen max-w-md mx-auto w-full">
+    <!-- Join Sub-View -->
+    <div id="player-join-subview" class="my-auto bg-arenaCard border border-slate-700/80 rounded-3xl p-6 shadow-2xl space-y-5">
+      <div class="text-center">
+        <span class="text-3xl">🎯</span>
+        <h2 class="font-display font-black text-2xl text-white mt-1">JOIN ROOM</h2>
+        <p class="text-xs text-slate-400 font-mono">Enter the 4-Letter Room PIN from the projector</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block mb-1">ROOM PIN</label>
+          <input type="text" id="player-input-pin" maxlength="4" placeholder="e.g. ABCD" class="w-full bg-slate-900 border-2 border-slate-700 rounded-2xl px-4 py-3 font-mono text-2xl text-center font-black tracking-widest uppercase text-white focus:outline-none focus:border-teamBlue">
+        </div>
+
+        <div>
+          <label class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block mb-1.5">SELECT YOUR SQUAD</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="selectTeam('red')" id="btn-team-red" class="team-choice-btn p-3 rounded-2xl border-2 border-teamRed/40 bg-teamRed/10 text-teamRed font-display font-black text-sm transition-all">🔴 RED</button>
+            <button onclick="selectTeam('blue')" id="btn-team-blue" class="team-choice-btn p-3 rounded-2xl border-2 border-teamBlue/40 bg-teamBlue/10 text-teamBlue font-display font-black text-sm transition-all">🔵 BLUE</button>
+            <button onclick="selectTeam('green')" id="btn-team-green" class="team-choice-btn p-3 rounded-2xl border-2 border-teamGreen/40 bg-teamGreen/10 text-teamGreen font-display font-black text-sm transition-all">🟢 GREEN</button>
+            <button onclick="selectTeam('yellow')" id="btn-team-yellow" class="team-choice-btn p-3 rounded-2xl border-2 border-teamYellow/40 bg-teamYellow/10 text-teamYellow font-display font-black text-sm transition-all">🟡 YELLOW</button>
+          </div>
+        </div>
+
+        <button onclick="joinRoomAsPlayer()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-teamGreen to-emerald-600 font-display font-black text-base text-slate-950 uppercase tracking-wider shadow-glowGreen transition-all active:scale-95">
+          CONNECT BUZZER 🚀
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Buzzer Sub-View -->
+    <div id="player-buzzer-subview" class="hidden flex-1 flex flex-col justify-between py-3">
+      <!-- Player HUD Header -->
+      <div class="flex items-center justify-between bg-arenaCard/90 border border-slate-800 rounded-2xl px-4 py-2.5">
+        <div class="flex items-center gap-2">
+          <span id="player-hud-color-dot" class="w-3.5 h-3.5 rounded-full bg-teamRed shadow-lg"></span>
+          <span id="player-hud-team-name" class="font-display font-black text-sm tracking-wide text-white">TEAM RED</span>
+        </div>
+        <div class="text-right">
+          <span class="text-[10px] font-mono text-slate-400 block">ROOM PIN</span>
+          <span id="player-hud-pin" class="font-mono font-black text-xs text-teamBlue tracking-widest">ABCD</span>
+        </div>
+      </div>
+
+      <!-- Center Status Alert Display -->
+      <div id="player-status-banner" class="my-auto text-center space-y-2 py-4">
+        <div id="player-status-badge" class="inline-flex px-4 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+          WAITING FOR NEXT WORD...
+        </div>
+        <div id="player-status-headline" class="font-display font-black text-2xl sm:text-3xl text-white">
+          Eyes on the Projector!
+        </div>
+      </div>
+
+      <!-- THE MASSIVE BUZZER BUTTON -->
+      <div class="w-full flex items-center justify-center pb-6">
+        <button id="giant-buzzer-btn" onclick="handlePlayerBuzzerClick()" class="w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-slate-700 bg-slate-800 text-slate-500 font-display font-black text-3xl sm:text-4xl shadow-2xl flex flex-col items-center justify-center gap-2 transition-all cursor-not-allowed select-none active:scale-95">
+          <span class="text-5xl">⚡</span>
+          <span>BUZZ!</span>
+          <span class="text-[11px] font-mono tracking-widest opacity-80">LOCKED</span>
+        </button>
+      </div>
+
+      <!-- Footer Team Score Counter -->
+      <div class="text-center pb-2">
+        <span class="text-xs font-mono text-slate-400">YOUR SQUAD SCORE: <strong id="player-team-score" class="text-teamYellow text-base font-black">0</strong> PTS</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SCREEN 3: HOST / PROJECTOR ARENA VIEW      -->
+  <!-- ========================================== -->
+  <div id="view-host" class="hidden flex-1 flex flex-col justify-between p-2 sm:p-5 max-w-7xl mx-auto w-full">
+    
+    <!-- TOP CONTROLS & HUD -->
+    <header class="w-full bg-arenaCard/95 border border-slate-800 rounded-3xl px-4 sm:px-6 py-3 shadow-2xl backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teamRed via-teamYellow to-teamBlue p-0.5 shadow-lg flex items-center justify-center font-display font-black text-xl text-white">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-display font-black text-lg sm:text-xl text-white tracking-wider">WORD UNTANGLE</h1>
+            <span class="px-2 py-0.5 rounded-md bg-teamBlue/20 text-teamBlue font-mono text-[10px] font-black border border-teamBlue/40">PROJECTOR ARENA</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Classroom Showdown • Millisecond Buzzer Lockout</p>
+        </div>
+      </div>
+
+      <!-- ROOM PIN & QR CODE POPUP BUTTON -->
+      <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-2xl px-3.5 py-1.5 shadow-inner">
+        <span class="text-[10px] font-mono text-slate-400 uppercase font-bold">JOIN PIN:</span>
+        <span id="host-display-pin" class="font-mono font-black text-xl text-teamYellow tracking-widest">----</span>
+        <button onclick="toggleQRModal()" class="px-2 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-white transition-all flex items-center gap-1 border border-slate-600">
+          <span>📲</span> <span>QR Code</span>
+        </button>
+      </div>
+
+      <!-- HOST TOOLS -->
+      <div class="flex items-center gap-2">
+        <button onclick="toggleFullscreen()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-slate-200 border border-slate-700 transition-all flex items-center gap-1">
+          <span>🖥️</span> <span>Fullscreen</span>
+        </button>
+        <button onclick="toggleSound()" id="host-audio-toggle" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-slate-200 border border-slate-700 transition-all">
+          🔊 Sound ON
+        </button>
+        <button onclick="resetAllScores()" class="px-2.5 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs font-mono font-bold border border-rose-700/60 transition-all" title="Reset Score">
+          🔄 Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- TEAMS SCOREBOARD (4 COLUMNS) -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 my-3">
+      <!-- Team Red -->
+      <div id="podium-card-red" class="p-3.5 sm:p-4 rounded-3xl border-2 border-slate-800 bg-arenaCard/90 flex flex-col justify-between transition-all relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3.5 h-3.5 rounded-full bg-teamRed shadow-glowRed"></span>
+            <span class="font-display font-black text-sm sm:text-base text-white">RED SQUAD</span>
+          </div>
+          <span id="player-count-red" class="text-[10px] font-mono text-slate-400">0 phones</span>
+        </div>
+        <div class="my-2 sm:my-3 text-center">
+          <div id="score-val-red" class="font-mono font-black text-4xl sm:text-5xl text-teamRed">0</div>
+          <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">POINTS</span>
+        </div>
+        <div id="buzzer-state-red" class="text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-slate-900/80 text-slate-400 uppercase">
+          READY
+        </div>
+      </div>
+
+      <!-- Team Blue -->
+      <div id="podium-card-blue" class="p-3.5 sm:p-4 rounded-3xl border-2 border-slate-800 bg-arenaCard/90 flex flex-col justify-between transition-all relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3.5 h-3.5 rounded-full bg-teamBlue shadow-glowBlue"></span>
+            <span class="font-display font-black text-sm sm:text-base text-white">BLUE SQUAD</span>
+          </div>
+          <span id="player-count-blue" class="text-[10px] font-mono text-slate-400">0 phones</span>
+        </div>
+        <div class="my-2 sm:my-3 text-center">
+          <div id="score-val-blue" class="font-mono font-black text-4xl sm:text-5xl text-teamBlue">0</div>
+          <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">POINTS</span>
+        </div>
+        <div id="buzzer-state-blue" class="text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-slate-900/80 text-slate-400 uppercase">
+          READY
+        </div>
+      </div>
+
+      <!-- Team Green -->
+      <div id="podium-card-green" class="p-3.5 sm:p-4 rounded-3xl border-2 border-slate-800 bg-arenaCard/90 flex flex-col justify-between transition-all relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3.5 h-3.5 rounded-full bg-teamGreen shadow-glowGreen"></span>
+            <span class="font-display font-black text-sm sm:text-base text-white">GREEN SQUAD</span>
+          </div>
+          <span id="player-count-green" class="text-[10px] font-mono text-slate-400">0 phones</span>
+        </div>
+        <div class="my-2 sm:my-3 text-center">
+          <div id="score-val-green" class="font-mono font-black text-4xl sm:text-5xl text-teamGreen">0</div>
+          <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">POINTS</span>
+        </div>
+        <div id="buzzer-state-green" class="text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-slate-900/80 text-slate-400 uppercase">
+          READY
+        </div>
+      </div>
+
+      <!-- Team Yellow -->
+      <div id="podium-card-yellow" class="p-3.5 sm:p-4 rounded-3xl border-2 border-slate-800 bg-arenaCard/90 flex flex-col justify-between transition-all relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3.5 h-3.5 rounded-full bg-teamYellow shadow-glowYellow"></span>
+            <span class="font-display font-black text-sm sm:text-base text-white">YELLOW SQUAD</span>
+          </div>
+          <span id="player-count-yellow" class="text-[10px] font-mono text-slate-400">0 phones</span>
+        </div>
+        <div class="my-2 sm:my-3 text-center">
+          <div id="score-val-yellow" class="font-mono font-black text-4xl sm:text-5xl text-teamYellow">0</div>
+          <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">POINTS</span>
+        </div>
+        <div id="buzzer-state-yellow" class="text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-slate-900/80 text-slate-400 uppercase">
+          READY
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN GAME SHOW STAGE -->
+    <main class="bg-arenaCard/90 border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl flex flex-col justify-between gap-6 relative overflow-hidden">
+      
+      <!-- Word Meta & Hint Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <span class="px-3 py-1 rounded-xl bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+            ROUND <span id="host-round-num" class="text-teamYellow">1</span> / <span id="host-total-rounds">16</span>
+          </span>
+          <span id="host-category-badge" class="px-3 py-1 rounded-xl bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-bold font-mono">
+            CATEGORY: CORPORATE STRATEGY
+          </span>
+          <span id="host-pos-badge" class="px-2.5 py-1 rounded-lg bg-slate-900 text-slate-400 text-xs font-mono italic">
+            verb
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-reveal-hint" onclick="revealLetterHint()" class="px-3 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 border border-amber-600/60 text-amber-300 font-mono text-xs font-bold transition-all flex items-center gap-1.5">
+            <span>💡</span> <span>Reveal 1st Letter Hint</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- BIG SCRAMBLED LETTERS ARENA -->
+      <div class="py-4 sm:py-8 text-center flex flex-col items-center justify-center gap-5">
+        <div id="scrambled-tiles-container" class="flex flex-wrap items-center justify-center gap-2 sm:gap-3.5 max-w-4xl">
+          <!-- Injected dynamically via JS: big bouncing letter cards -->
+        </div>
+
+        <!-- Clue / Definition Description -->
+        <p id="host-word-meaning" class="text-slate-300 text-sm sm:text-base font-medium max-w-xl text-center px-4">
+          Meaning: A point of congestion in a system that impedes and slows down progress.
+        </p>
+      </div>
+
+      <!-- BUZZER CALLOUT & TIMERS HUD -->
+      <div id="buzzer-callout-panel" class="w-full bg-slate-900/90 border-2 border-slate-700 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all">
+        
+        <!-- Left: Status Banner -->
+        <div class="flex items-center gap-3">
+          <div id="buzzer-callout-icon" class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-2xl">
+            ⏳
+          </div>
+          <div>
+            <div id="buzzer-callout-title" class="font-display font-black text-lg sm:text-xl text-white">
+              BUZZERS OPEN! UNJUMBLE THE WORD!
+            </div>
+            <p id="buzzer-callout-desc" class="text-xs text-slate-400 font-mono">
+              First team to hit their buzzer gets 5 seconds to state the word out loud.
+            </p>
+          </div>
+        </div>
+
+        <!-- Right: Digital Timer Display -->
+        <div class="flex items-center gap-3">
+          <div class="text-right">
+            <span id="timer-label" class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block">COUNTDOWN</span>
+            <div id="host-countdown-clock" class="font-mono font-black text-3xl sm:text-4xl text-teamYellow">
+              --
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FACILITATOR ADJUDICATION & ROUND CONTROLS -->
+      <div class="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <!-- Two-Step Scoring Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-correct-word" onclick="adjudicateWordCorrect()" disabled class="px-4 sm:px-5 py-3 rounded-2xl bg-teamGreen text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 shadow-glowGreen transition-all flex items-center gap-2">
+            <span>✅</span> <span>WORD CORRECT (+1 PT)</span>
+          </button>
+
+          <button id="btn-valid-sentence" onclick="adjudicateSentenceValid()" disabled class="px-4 sm:px-5 py-3 rounded-2xl bg-teamBlue text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 shadow-glowBlue transition-all flex items-center gap-2">
+            <span>🗣️</span> <span>SENTENCE VALID (+1 PT)</span>
+          </button>
+
+          <button id="btn-wrong-buzz" onclick="adjudicateWrongBuzz()" disabled class="px-3.5 sm:px-4 py-3 rounded-2xl bg-rose-950/80 hover:bg-rose-900 border border-rose-600/80 text-rose-300 font-display font-black text-xs sm:text-sm tracking-wider uppercase disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5">
+            <span>❌</span> <span>WRONG / RE-OPEN BUZZER</span>
+          </button>
+        </div>
+
+        <!-- Next Word Advance Button -->
+        <div class="flex items-center gap-2">
+          <button onclick="advanceToNextWord()" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-teamYellow to-amber-500 text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase hover:brightness-110 shadow-glowYellow transition-all flex items-center gap-2">
+            <span>NEXT WORD</span> <span>➡️</span>
+          </button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- QR CODE MODAL FOR PROJECTOR VIEW -->
+  <div id="modal-qr" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-arenaCard border-2 border-teamBlue/80 w-full max-w-sm rounded-3xl p-6 text-center space-y-4 shadow-glowBlue">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+        <h3 class="font-display font-black text-lg text-white">SCAN TO JOIN SQUAD</h3>
+        <button onclick="toggleQRModal()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl inline-block shadow-inner">
+        <div id="qrcode-container"></div>
+      </div>
+
+      <div>
+        <p class="text-xs text-slate-400 font-mono">Or open this site and enter PIN:</p>
+        <span id="qr-modal-pin" class="font-mono font-black text-3xl text-teamYellow tracking-widest block mt-1">ABCD</span>
+      </div>
+
+      <button onclick="toggleQRModal()" class="w-full py-2.5 rounded-xl bg-slate-800 text-slate-200 font-mono text-xs font-bold hover:bg-slate-700">
+        Close Window
+      </button>
+    </div>
+  </div>
+
+  <!-- FIREBASE MODULE & REALTIME GAMEPLAY ENGINE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
+    // Global Environment Configs
+    const rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+    let firebaseConfig = {};
+    try {
+      firebaseConfig = JSON.parse(rawConfig);
+    } catch(e) {
+      console.warn("Using default fallback or memory configuration");
+    }
+
+    // Default Fallback Config if environment is empty
+    if (!firebaseConfig.apiKey) {
+      firebaseConfig = {
+        apiKey: "AIzaSyDummyKeyForMockFallbackModeOnly000",
+        authDomain: "mock-buzzer-showdown.firebaseapp.com",
+        databaseURL: "https://mock-buzzer-showdown-default-rtdb.firebaseio.com",
+        projectId: "mock-buzzer-showdown",
+        appId: "1:1234567890:web:abcdef123456"
+      };
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    let currentUser = null;
+    let roomRef = null;
+    let isFirebaseReady = false;
+
+    // Authenticate
+    async function initAuth() {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          const cred = await signInWithCustomToken(auth, __initial_auth_token);
+          currentUser = cred.user;
+        } else {
+          const cred = await signInAnonymously(auth);
+          currentUser = cred.user;
+        }
+        isFirebaseReady = true;
+      } catch (err) {
+        console.warn("Auth initialization fell back to local memory mode:", err);
+        isFirebaseReady = false;
+      }
+    }
+    initAuth();
+
+    // ==========================================
+    // AUDIO SYNTHESIZER (ZERO-DEPENDENCY WEB AUDIO)
+    // ==========================================
+    let audioCtx = null;
+    let soundEnabled = true;
+
+    function getAudio() {
+      if (!audioCtx) {
+        const AudioClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioClass) audioCtx = new AudioClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    window.toggleSound = function() {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById('host-audio-toggle');
+      if (btn) btn.textContent = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
+      if (soundEnabled) playCorrectChime();
+    };
+
+    function playBuzzerSlamSound() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudio();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.45);
+
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.45);
+      } catch(e) {}
+    }
+
+    function playTickSound(urgent = false) {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudio();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(urgent ? 880 : 500, now);
+
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } catch(e) {}
+    }
+
+    function playCorrectChime() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudio();
+        if (!ctx) return;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const start = ctx.currentTime + (idx * 0.08);
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, start);
+
+          gain.gain.setValueAtTime(0.25, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(start);
+          osc.stop(start + 0.35);
+        });
+      } catch(e) {}
+    }
+
+    function playWrongSound() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudio();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc1.type = 'sawtooth';
+        osc2.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(140, now);
+        osc2.frequency.setValueAtTime(133, now);
+
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.4);
+        osc2.stop(now + 0.4);
+      } catch(e) {}
+    }
+
+    // ==========================================
+    // VOCABULARY DECK
+    // ==========================================
+    const WORD_LIST = [
+      { word: 'DEADLINE', category: 'Project Management', pos: 'noun', def: 'The latest time or date by which something should be completed.' },
+      { word: 'FEASIBLE', category: 'Technical Strategy', pos: 'adjective', def: 'Possible, practical, and capable of being done easily.' },
+      { word: 'ESCALATE', category: 'Client Communication', pos: 'verb', def: 'To raise a problem or dispute to higher management levels.' },
+      { word: 'PRECISION', category: 'Quality & Engineering', pos: 'noun', def: 'The quality of being exact, accurate, and meticulously detailed.' },
+      { word: 'COMPROMISE', category: 'Diplomacy & Negotiation', pos: 'noun / verb', def: 'An agreement reached by each party making concessions.' },
+      { word: 'FEEDBACK', category: 'Performance & Growth', pos: 'noun', def: 'Information and evaluative critique given about one\'s work.' },
+      { word: 'BOTTLENECK', category: 'Operations & Process', pos: 'noun', def: 'A point of congestion that slows down the entire project pipeline.' },
+      { word: 'CONSENSUS', category: 'Executive Alignment', pos: 'noun', def: 'A general agreement arrived at by all stakeholders.' },
+      { word: 'LEVERAGE', category: 'Resource Utilization', pos: 'verb', def: 'To use something to maximum advantage and gain.' },
+      { word: 'MITIGATE', category: 'Risk Management', pos: 'verb', def: 'To make something bad or dangerous less severe or harmful.' },
+      { word: 'CONSTRAINTS', category: 'Design & Budgeting', pos: 'noun (plural)', def: 'Limitations or restrictions that dictate project boundaries.' },
+      { word: 'INNOVATION', category: 'Product Growth', pos: 'noun', def: 'The action or process of introducing novel, transformative ideas.' },
+      { word: 'SYNERGY', category: 'Cross-Team Collaboration', pos: 'noun', def: 'Combined power of team working together greater than separate efforts.' },
+      { word: 'REDUNDANT', category: 'Systems & Infrastructure', pos: 'adjective', def: 'No longer needed or useful; superfluous duplicate efforts.' },
+      { word: 'AMBIGUOUS', category: 'Verbal Communication', pos: 'adjective', def: 'Open to more than one interpretation; unclear and confusing.' },
+      { word: 'SUBSTANTIATE', category: 'Research & Evidence', pos: 'verb', def: 'To provide hard evidence to prove the validity of a claim.' }
+    ];
+
+    // Helper: Scramble Word ensuring it does not equal the target word
+    function scramble(word) {
+      const arr = word.split('');
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      const scrambled = arr.join('');
+      return (scrambled === word && word.length > 2) ? scramble(word) : scrambled;
+    }
+
+    // ==========================================
+    // SHARED GAME STATE (SYNCED ACROSS FIREBASE)
+    // ==========================================
+    let state = {
+      roomPin: 'ABCD',
+      currentWordIndex: 0,
+      targetWord: WORD_LIST[0].word,
+      scrambledLetters: scramble(WORD_LIST[0].word),
+      category: WORD_LIST[0].category,
+      pos: WORD_LIST[0].pos,
+      def: WORD_LIST[0].def,
+      hintRevealed: false,
+      roundStatus: 'scrambled', // 'scrambled', 'buzzed', 'sentence_sprint', 'round_over'
+      activeBuzzerTeam: null,
+      buzzerTimestamp: 0,
+      scores: { red: 0, blue: 0, green: 0, yellow: 0 },
+      lockedOutTeams: [] // Teams that missed their guess for the current word
+    };
+
+    let localRole = null; // 'host' or 'player'
+    let myPlayerTeam = 'red';
+    let countdownInterval = null;
+    let remainingCountdown = 0;
+
+    // Generate random 4-letter PIN
+    function generateRoomPin() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let pin = '';
+      for (let i = 0; i < 4; i++) {
+        pin += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return pin;
+    }
+
+    // ==========================================
+    // HOST MODE ENGINE
+    // ==========================================
+    window.startAsHost = async function() {
+      localRole = 'host';
+      state.roomPin = generateRoomPin();
+      document.getElementById('view-router').classList.add('hidden');
+      document.getElementById('view-host').classList.remove('hidden');
+
+      document.getElementById('host-display-pin').textContent = state.roomPin;
+      document.getElementById('qr-modal-pin').textContent = state.roomPin;
+
+      // Generate QR Code
+      const joinUrl = `${window.location.origin}${window.location.pathname}?pin=${state.roomPin}`;
+      const qrContainer = document.getElementById('qrcode-container');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: joinUrl,
+        width: 180,
+        height: 180,
+        colorDark: '#060814',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      // Initialize Firebase Listeners
+      initFirebaseHostRoom();
+      setupWordRound(0);
+    };
+
+    function initFirebaseHostRoom() {
+      if (!isFirebaseReady) return;
+      roomRef = ref(db, `rooms/${state.roomPin}`);
+
+      // Sync local state to Firebase
+      set(roomRef, state);
+
+      // Listen for buzzer presses from mobile devices
+      onValue(roomRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        // If a new buzzer arrived from a phone
+        if (data.roundStatus === 'buzzed' && state.roundStatus === 'scrambled') {
+          handleIncomingBuzzer(data.activeBuzzerTeam);
+        }
+      });
+    }
+
+    function setupWordRound(index) {
+      state.currentWordIndex = index % WORD_LIST.length;
+      const target = WORD_LIST[state.currentWordIndex];
+      state.targetWord = target.word;
+      state.scrambledLetters = scramble(target.word);
+      state.category = target.category;
+      state.pos = target.pos;
+      state.def = target.def;
+      state.hintRevealed = false;
+      state.roundStatus = 'scrambled';
+      state.activeBuzzerTeam = null;
+      state.lockedOutTeams = [];
+
+      clearInterval(countdownInterval);
+
+      // Update Projector UI
+      document.getElementById('host-round-num').textContent = state.currentWordIndex + 1;
+      document.getElementById('host-total-rounds').textContent = WORD_LIST.length;
+      document.getElementById('host-category-badge').textContent = `CATEGORY: ${state.category.toUpperCase()}`;
+      document.getElementById('host-pos-badge').textContent = state.pos;
+      document.getElementById('host-word-meaning').textContent = `Meaning: ${state.def}`;
+
+      renderScrambledTiles(state.scrambledLetters);
+      updateHostBuzzerHUD('scrambled', null);
+      updateScoreboardDisplays();
+
+      // Reset action button states
+      document.getElementById('btn-correct-word').disabled = true;
+      document.getElementById('btn-valid-sentence').disabled = true;
+      document.getElementById('btn-wrong-buzz').disabled = true;
+      document.getElementById('btn-reveal-hint').disabled = false;
+
+      syncStateToFirebase();
+    }
+
+    function renderScrambledTiles(letters, isUnscrambled = false) {
+      const container = document.getElementById('scrambled-tiles-container');
+      container.innerHTML = '';
+
+      letters.split('').forEach((char, idx) => {
+        const tile = document.createElement('div');
+        tile.className = `letter-tile w-12 h-14 sm:w-16 sm:h-20 rounded-2xl flex items-center justify-center font-display font-black text-2xl sm:text-4xl shadow-xl border-2 transition-all ${
+          isUnscrambled 
+            ? 'bg-teamGreen/20 border-teamGreen text-teamGreen' 
+            : (state.hintRevealed && idx === 0 
+                ? 'bg-amber-950/40 border-amber-500 text-amber-300' 
+                : 'bg-slate-800/90 border-slate-700 text-white')
+        }`;
+        tile.textContent = char;
+        container.appendChild(tile);
+      });
+    }
+
+    window.revealLetterHint = function() {
+      state.hintRevealed = true;
+      document.getElementById('btn-reveal-hint').disabled = true;
+      // Show first letter in position
+      const firstChar = state.targetWord.charAt(0);
+      let rest = state.scrambledLetters.split('');
+      const charIndex = rest.indexOf(firstChar);
+      if (charIndex > -1) {
+        rest.splice(charIndex, 1);
+      }
+      state.scrambledLetters = firstChar + rest.join('');
+      renderScrambledTiles(state.scrambledLetters);
+      playTickSound(true);
+      syncStateToFirebase();
+    };
+
+    function handleIncomingBuzzer(teamId) {
+      if (state.lockedOutTeams.includes(teamId)) return; // Ignore if already locked out
+
+      state.roundStatus = 'buzzed';
+      state.activeBuzzerTeam = teamId;
+      state.buzzerTimestamp = Date.now();
+
+      playBuzzerSlamSound();
+      updateHostBuzzerHUD('buzzed', teamId);
+
+      // Enable Host Word Adjudication Buttons
+      document.getElementById('btn-correct-word').disabled = false;
+      document.getElementById('btn-wrong-buzz').disabled = false;
+      document.getElementById('btn-valid-sentence').disabled = true;
+
+      // Start 5-second solve countdown timer
+      startSolveTimer(5);
+      syncStateToFirebase();
+    }
+
+    function startSolveTimer(seconds) {
+      clearInterval(countdownInterval);
+      remainingCountdown = seconds;
+      const clock = document.getElementById('host-countdown-clock');
+      clock.textContent = `${remainingCountdown}s`;
+
+      countdownInterval = setInterval(() => {
+        remainingCountdown--;
+        clock.textContent = `${remainingCountdown}s`;
+        playTickSound(remainingCountdown <= 2);
+
+        if (remainingCountdown <= 0) {
+          clearInterval(countdownInterval);
+          clock.textContent = 'TIME UP!';
+          playWrongSound();
+        }
+      }, 1000);
+    }
+
+    function updateHostBuzzerHUD(status, teamId) {
+      const panel = document.getElementById('buzzer-callout-panel');
+      const title = document.getElementById('buzzer-callout-title');
+      const desc = document.getElementById('buzzer-callout-desc');
+      const icon = document.getElementById('buzzer-callout-icon');
+      const clock = document.getElementById('host-countdown-clock');
+
+      // Reset team podium cards
+      ['red', 'blue', 'green', 'yellow'].forEach(id => {
+        const card = document.getElementById(`podium-card-${id}`);
+        const stateTag = document.getElementById(`buzzer-state-${id}`);
+        card.classList.remove('border-teamRed', 'border-teamBlue', 'border-teamGreen', 'border-teamYellow', 'shadow-glowRed', 'shadow-glowBlue', 'shadow-glowGreen', 'shadow-glowYellow', 'scale-105');
+        stateTag.textContent = state.lockedOutTeams.includes(id) ? 'LOCKED OUT' : 'READY';
+        stateTag.className = state.lockedOutTeams.includes(id) 
+          ? 'text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-rose-950/70 text-rose-400 uppercase' 
+          : 'text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-slate-900/80 text-slate-400 uppercase';
+      });
+
+      if (status === 'scrambled') {
+        panel.className = 'w-full bg-slate-900/90 border-2 border-slate-700 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all';
+        title.textContent = 'BUZZERS OPEN! UNJUMBLE THE WORD!';
+        desc.textContent = 'First team to hit their mobile buzzer gets 5 seconds to state the word.';
+        icon.textContent = '⚡';
+        clock.textContent = '--';
+      } else if (status === 'buzzed') {
+        const teamColors = { red: 'text-teamRed', blue: 'text-teamBlue', green: 'text-teamGreen', yellow: 'text-teamYellow' };
+        const glowBorders = { red: 'border-teamRed shadow-glowRed', blue: 'border-teamBlue shadow-glowBlue', green: 'border-teamGreen shadow-glowGreen', yellow: 'border-teamYellow shadow-glowYellow' };
+
+        panel.className = `w-full bg-slate-900/90 border-2 ${glowBorders[teamId]} rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all`;
+        title.innerHTML = `🚨 <span class="${teamColors[teamId]} font-black">${teamId.toUpperCase()} SQUAD</span> BUZZED IN!`;
+        desc.textContent = 'They have 5 SECONDS to state the correct unjumbled word aloud!';
+        icon.textContent = '📢';
+
+        // Highlight active team's podium card
+        const card = document.getElementById(`podium-card-${teamId}`);
+        const stateTag = document.getElementById(`buzzer-state-${teamId}`);
+        card.classList.add(glowBorders[teamId], 'scale-105');
+        stateTag.textContent = 'ANSWERING NOW';
+        stateTag.className = 'text-[10px] font-mono font-bold text-center py-1 rounded-xl bg-teamYellow text-slate-950 uppercase animate-pulse';
+      } else if (status === 'sentence_sprint') {
+        panel.className = 'w-full bg-slate-900/90 border-2 border-teamBlue shadow-glowBlue rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all';
+        title.innerHTML = `🗣️ 15-SECOND SENTENCE SPRINT: <span class="text-teamBlue font-black">${teamId.toUpperCase()} SQUAD</span>`;
+        desc.textContent = 'Speak ONE complete, grammatically sound workplace sentence using the target word!';
+        icon.textContent = '⏱️';
+      }
+    }
+
+    // Adjudication: 1. Word is Correct
+    window.adjudicateWordCorrect = function() {
+      clearInterval(countdownInterval);
+      playCorrectChime();
+
+      // Award +1 Pt to Buzzing Team
+      state.scores[state.activeBuzzerTeam] += 1;
+      updateScoreboardDisplays();
+
+      // Unscramble the Word on screen
+      renderScrambledTiles(state.targetWord, true);
+
+      // Trigger Step 2: 15-Second Sentence Sprint
+      state.roundStatus = 'sentence_sprint';
+      updateHostBuzzerHUD('sentence_sprint', state.activeBuzzerTeam);
+
+      document.getElementById('btn-correct-word').disabled = true;
+      document.getElementById('btn-valid-sentence').disabled = false;
+      document.getElementById('btn-wrong-buzz').disabled = false;
+
+      // Start 15s Sentence Sprint Clock
+      startSentenceSprintTimer(15);
+      syncStateToFirebase();
+    };
+
+    function startSentenceSprintTimer(seconds) {
+      clearInterval(countdownInterval);
+      remainingCountdown = seconds;
+      const clock = document.getElementById('host-countdown-clock');
+      clock.textContent = `${remainingCountdown}s`;
+
+      countdownInterval = setInterval(() => {
+        remainingCountdown--;
+        clock.textContent = `${remainingCountdown}s`;
+        playTickSound(remainingCountdown <= 3);
+
+        if (remainingCountdown <= 0) {
+          clearInterval(countdownInterval);
+          clock.textContent = 'TIME UP!';
+          playWrongSound();
+        }
+      }, 1000);
+    }
+
+    // Adjudication: 2. Sentence is Valid
+    window.adjudicateSentenceValid = function() {
+      clearInterval(countdownInterval);
+      playCorrectChime();
+
+      // Award second +1 Pt
+      state.scores[state.activeBuzzerTeam] += 1;
+      updateScoreboardDisplays();
+
+      // Blast Confetti
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+
+      state.roundStatus = 'round_over';
+      const panel = document.getElementById('buzzer-callout-panel');
+      panel.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">🎉</span>
+          <div>
+            <div class="font-display font-black text-xl text-teamGreen">PERFECT SCORE (+2 PTS)! ROUND COMPLETE</div>
+            <p class="text-xs text-slate-300 font-mono">Word solved and clear spoken sentence delivered successfully!</p>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('btn-valid-sentence').disabled = true;
+      document.getElementById('btn-wrong-buzz').disabled = true;
+
+      syncStateToFirebase();
+    };
+
+    // Adjudication: 3. Wrong Word / Miss -> Re-open buzzer for others to steal!
+    window.adjudicateWrongBuzz = function() {
+      clearInterval(countdownInterval);
+      playWrongSound();
+
+      // Lock out current team from buzzing for this round
+      state.lockedOutTeams.push(state.activeBuzzerTeam);
+
+      // Re-open buzzer for remaining squads
+      state.roundStatus = 'scrambled';
+      state.activeBuzzerTeam = null;
+
+      updateHostBuzzerHUD('scrambled', null);
+
+      document.getElementById('btn-correct-word').disabled = true;
+      document.getElementById('btn-valid-sentence').disabled = true;
+      document.getElementById('btn-wrong-buzz').disabled = true;
+
+      syncStateToFirebase();
+    };
+
+    window.advanceToNextWord = function() {
+      setupWordRound(state.currentWordIndex + 1);
+    };
+
+    window.resetAllScores = function() {
+      state.scores = { red: 0, blue: 0, green: 0, yellow: 0 };
+      updateScoreboardDisplays();
+      syncStateToFirebase();
+    };
+
+    function updateScoreboardDisplays() {
+      ['red', 'blue', 'green', 'yellow'].forEach(id => {
+        const scoreElem = document.getElementById(`score-val-${id}`);
+        if (scoreElem) scoreElem.textContent = state.scores[id];
+      });
+    }
+
+    function syncStateToFirebase() {
+      if (isFirebaseReady && roomRef) {
+        update(roomRef, state).catch(err => console.warn("Firebase update failed:", err));
+      }
+    }
+
+    // ==========================================
+    // PLAYER / MOBILE BUZZER ENGINE
+    // ==========================================
+    window.showPlayerJoinForm = function() {
+      localRole = 'player';
+      document.getElementById('view-router').classList.add('hidden');
+      document.getElementById('view-player').classList.remove('hidden');
+
+      // Check if URL has ?pin=ABCD
+      const params = new URLSearchParams(window.location.search);
+      const urlPin = params.get('pin');
+      if (urlPin) {
+        document.getElementById('player-input-pin').value = urlPin.toUpperCase();
+      }
+    };
+
+    window.selectTeam = function(teamId) {
+      myPlayerTeam = teamId;
+      document.querySelectorAll('.team-choice-btn').forEach(b => {
+        b.classList.remove('ring-4', 'ring-white', 'scale-105');
+      });
+      const selectedBtn = document.getElementById(`btn-team-${teamId}`);
+      if (selectedBtn) {
+        selectedBtn.classList.add('ring-4', 'ring-white', 'scale-105');
+      }
+    };
+
+    window.joinRoomAsPlayer = function() {
+      const pin = document.getElementById('player-input-pin').value.trim().toUpperCase();
+      if (pin.length !== 4) {
+        alert("Please enter a valid 4-character Room PIN from the projector screen!");
+        return;
+      }
+
+      state.roomPin = pin;
+      document.getElementById('player-join-subview').classList.add('hidden');
+      document.getElementById('player-buzzer-subview').classList.remove('hidden');
+
+      // Setup Player HUD
+      document.getElementById('player-hud-pin').textContent = pin;
+      const teamDisplayNames = { red: 'RED SQUAD', blue: 'BLUE SQUAD', green: 'GREEN SQUAD', yellow: 'YELLOW SQUAD' };
+      const teamColors = { red: '#ff2d55', blue: '#00c7fd', green: '#10e760', yellow: '#ffb800' };
+
+      document.getElementById('player-hud-team-name').textContent = teamDisplayNames[myPlayerTeam];
+      document.getElementById('player-hud-color-dot').style.backgroundColor = teamColors[myPlayerTeam];
+
+      // Connect to Firebase Room
+      initFirebasePlayerRoom(pin);
+    };
+
+    function initFirebasePlayerRoom(pin) {
+      if (!isFirebaseReady) return;
+      const playerRoomRef = ref(db, `rooms/${pin}`);
+
+      onValue(playerRoomRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        // Sync local copy
+        state = data;
+        updatePlayerBuzzerUI();
+      });
+    }
+
+    function updatePlayerBuzzerUI() {
+      const buzzerBtn = document.getElementById('giant-buzzer-btn');
+      const badge = document.getElementById('player-status-badge');
+      const headline = document.getElementById('player-status-headline');
+      const scoreElem = document.getElementById('player-team-score');
+
+      if (scoreElem && state.scores) {
+        scoreElem.textContent = state.scores[myPlayerTeam] || 0;
+      }
+
+      const isLockedOut = state.lockedOutTeams && state.lockedOutTeams.includes(myPlayerTeam);
+
+      if (isLockedOut) {
+        // Locked out for this word
+        buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-rose-900 bg-rose-950/60 text-rose-500 font-display font-black text-3xl shadow-2xl flex flex-col items-center justify-center gap-2 cursor-not-allowed select-none opacity-60';
+        buzzerBtn.innerHTML = '<span class="text-5xl">🚫</span><span>LOCKED OUT</span><span class="text-[11px] font-mono">Missed this word</span>';
+        badge.textContent = 'MISSED CHANCE';
+        headline.textContent = 'Wait for Next Word';
+        return;
+      }
+
+      if (state.roundStatus === 'scrambled') {
+        // BUZZER READY TO HIT!
+        const teamColors = {
+          red: 'border-teamRed bg-gradient-to-tr from-rose-600 to-teamRed shadow-glowRed',
+          blue: 'border-teamBlue bg-gradient-to-tr from-cyan-600 to-teamBlue shadow-glowBlue',
+          green: 'border-teamGreen bg-gradient-to-tr from-emerald-600 to-teamGreen shadow-glowGreen',
+          yellow: 'border-teamYellow bg-gradient-to-tr from-amber-600 to-teamYellow shadow-glowYellow'
+        };
+
+        buzzerBtn.className = `w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 ${teamColors[myPlayerTeam]} text-white font-display font-black text-4xl shadow-2xl flex flex-col items-center justify-center gap-2 cursor-pointer select-none buzzer-pulsing active:scale-95`;
+        buzzerBtn.innerHTML = '<span class="text-6xl">⚡</span><span>BUZZ!</span><span class="text-xs font-mono tracking-widest uppercase">TAP TO SLAM</span>';
+        badge.textContent = 'ROUND LIVE';
+        headline.textContent = 'Unjumble & Slam Buzzer!';
+
+      } else if (state.roundStatus === 'buzzed') {
+        if (state.activeBuzzerTeam === myPlayerTeam) {
+          // WE BUZZED!
+          buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-white bg-teamGreen text-slate-950 font-display font-black text-3xl shadow-buzzerActive flex flex-col items-center justify-center gap-2 select-none';
+          buzzerBtn.innerHTML = '<span class="text-6xl">🎉</span><span>YOU BUZZED!</span><span class="text-xs font-mono tracking-widest font-black uppercase">SPEAK ALOUD NOW!</span>';
+          badge.textContent = 'YOUR SQUAD HAS THE FLOOR';
+          headline.textContent = 'State the Word to the Room!';
+        } else {
+          // ANOTHER TEAM BUZZED
+          buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-slate-700 bg-slate-900 text-slate-500 font-display font-black text-3xl shadow-2xl flex flex-col items-center justify-center gap-2 cursor-not-allowed select-none opacity-50';
+          buzzerBtn.innerHTML = `<span class="text-5xl">🔒</span><span>${state.activeBuzzerTeam.toUpperCase()} BUZZED</span><span class="text-[11px] font-mono">Listening...</span>`;
+          badge.textContent = 'LOCKED OUT';
+          headline.textContent = `${state.activeBuzzerTeam.toUpperCase()} is answering...`;
+        }
+      } else if (state.roundStatus === 'sentence_sprint') {
+        if (state.activeBuzzerTeam === myPlayerTeam) {
+          buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-teamBlue bg-indigo-950 text-teamBlue font-display font-black text-3xl shadow-glowBlue flex flex-col items-center justify-center gap-2 select-none';
+          buzzerBtn.innerHTML = '<span class="text-6xl">🗣️</span><span>SPEAK!</span><span class="text-xs font-mono tracking-widest uppercase">15s Sentence Sprint</span>';
+          badge.textContent = 'SENTENCE SPRINT';
+          headline.textContent = 'Speak a complete sentence!';
+        } else {
+          buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-slate-700 bg-slate-900 text-slate-500 font-display font-black text-3xl shadow-2xl flex flex-col items-center justify-center gap-2 cursor-not-allowed select-none opacity-50';
+          buzzerBtn.innerHTML = '<span class="text-5xl">👂</span><span>LISTENING</span><span class="text-[11px] font-mono">Sentence Sprint</span>';
+          badge.textContent = 'LISTEN TO SENTENCE';
+          headline.textContent = `${state.activeBuzzerTeam.toUpperCase()} is speaking!`;
+        }
+      } else {
+        // Round Over
+        buzzerBtn.className = 'w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-slate-700 bg-slate-800 text-slate-500 font-display font-black text-3xl shadow-2xl flex flex-col items-center justify-center gap-2 cursor-not-allowed select-none';
+        buzzerBtn.innerHTML = '<span class="text-5xl">⏳</span><span>STAND BY</span><span class="text-[11px] font-mono">Next Word Coming</span>';
+        badge.textContent = 'ROUND COMPLETE';
+        headline.textContent = 'Next word loading...';
+      }
+    }
+
+    // Player Tap Buzzer Event
+    window.handlePlayerBuzzerClick = function() {
+      if (state.roundStatus !== 'scrambled') return;
+      if (state.lockedOutTeams && state.lockedOutTeams.includes(myPlayerTeam)) return;
+
+      // Haptic Vibration Feedback on Phone
+      if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+
+      playBuzzerSlamSound();
+
+      // Submit Buzzer event to Firebase Realtime Database
+      if (isFirebaseReady) {
+        const playerRoomRef = ref(db, `rooms/${state.roomPin}`);
+        update(playerRoomRef, {
+          roundStatus: 'buzzed',
+          activeBuzzerTeam: myPlayerTeam,
+          buzzerTimestamp: Date.now()
+        }).catch(err => console.warn("Buzzer update failed:", err));
+      }
+    };
+
+    // Modal QR Toggle
+    window.toggleQRModal = function() {
+      const modal = document.getElementById('modal-qr');
+      modal.classList.toggle('hidden');
+    };
+
+    window.toggleFullscreen = function() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    };
+
+    // Automatic Direct Join via URL param ?pin=XXXX
+    window.onload = function() {
+      const params = new URLSearchParams(window.location.search);
+      const urlPin = params.get('pin');
+      if (urlPin) {
+        showPlayerJoinForm();
+      }
+    };
+  </script>
+</body>
+</html>
