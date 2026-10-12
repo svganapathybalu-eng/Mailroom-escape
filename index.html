@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WORD UNTANGLE: Type & Buzz Showdown</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;900&family=Space+Grotesk:wght@600;700;800&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+
+  <!-- QRCode.js CDN for mobile quick connect -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <!-- PeerJS CDN: Direct WebRTC DataChannels (Host = Room Hub) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Outfit"', 'sans-serif'],
+            display: ['"Space Grotesk"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            arenaDark: '#040714',
+            arenaCard: '#0b1227',
+            crimson: '#ff2257',
+            cobalt: '#00d2ff',
+            emerald: '#00f576',
+            amber: '#ffb300',
+            violet: '#a855f7',
+            coral: '#ff6b6b'
+          },
+          boxShadow: {
+            crimsonGlow: '0 0 35px rgba(255, 34, 87, 0.6)',
+            cobaltGlow: '0 0 35px rgba(0, 210, 255, 0.6)',
+            emeraldGlow: '0 0 35px rgba(0, 245, 118, 0.6)',
+            amberGlow: '0 0 35px rgba(255, 179, 0, 0.6)',
+            neonCenter: '0 0 50px rgba(0, 210, 255, 0.25)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #040714;
+      background-image: 
+        radial-gradient(circle at 12% 15%, rgba(255, 34, 87, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 88% 18%, rgba(0, 210, 255, 0.14) 0%, transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(0, 245, 118, 0.08) 0%, transparent 50%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    @keyframes floatTile {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-6px) rotate(0.8deg); }
+    }
+    .tile-float { animation: floatTile 3s ease-in-out infinite; }
+
+    @keyframes pulseScale {
+      0%, 100% { transform: scale(1); filter: brightness(1); }
+      50% { transform: scale(1.04); filter: brightness(1.2); }
+    }
+    .buzzer-pulse { animation: pulseScale 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+    @keyframes shakeAnimation {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-9px); }
+      40%, 80% { transform: translateX(9px); }
+    }
+    .shake-box { animation: shakeAnimation 0.4s ease-in-out; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between overflow-x-hidden antialiased">
+
+  <!-- ======================================================== -->
+  <!-- 1. ENTRY ROUTER (CHOOSE HOST OR JOIN AS SQUAD)           -->
+  <!-- ======================================================== -->
+  <div id="view-router" class="flex-1 flex flex-col items-center justify-center p-4 min-h-screen">
+    <div class="w-full max-w-md bg-arenaCard border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-center space-y-6">
+      <div class="inline-flex p-4 rounded-2xl bg-gradient-to-tr from-crimson via-amber to-cobalt shadow-lg">
+        <span class="text-4xl">⚡</span>
+      </div>
+      <div>
+        <h1 class="font-display font-black text-3xl sm:text-4xl tracking-wider text-white">WORD UNTANGLE</h1>
+        <p class="text-xs font-mono uppercase tracking-widest text-slate-400 mt-1">Multi-Squad WebRTC Arena</p>
+      </div>
+
+      <div class="space-y-3 pt-2">
+        <button onclick="launchHostMode()" class="w-full p-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:brightness-110 font-display font-black text-base text-white tracking-wider shadow-cobaltGlow transition-all flex items-center justify-center gap-3 active:scale-95">
+          <span>🖥️</span>
+          <span>LAUNCH HOST / PROJECTOR</span>
+        </button>
+        <p class="text-[11px] text-slate-400">Presents room PIN, dynamic squads scoreboard & live typing mirror.</p>
+        
+        <div class="relative py-2 flex items-center justify-center">
+          <div class="w-full border-t border-slate-800"></div>
+          <span class="absolute px-3 bg-arenaCard text-[10px] font-mono text-slate-500 uppercase">OR PLAYERS JOIN HERE</span>
+        </div>
+
+        <button onclick="launchPlayerView()" class="w-full p-4 rounded-2xl bg-gradient-to-r from-crimson to-pink-600 hover:brightness-110 font-display font-black text-base text-white tracking-wider shadow-crimsonGlow transition-all flex items-center justify-center gap-3 active:scale-95">
+          <span>📱</span>
+          <span>JOIN AS A TEAM BUZZER</span>
+        </button>
+        <p class="text-[11px] text-slate-400">Form or join any custom team, buzz, solve & type sentences!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 2. MOBILE PLAYER CONTROLLER                              -->
+  <!-- ======================================================== -->
+  <div id="view-player" class="hidden flex-1 flex flex-col justify-between p-3 sm:p-4 min-h-screen max-w-md mx-auto w-full">
+    
+    <!-- Player Step 1: Join Form -->
+    <div id="player-form-screen" class="my-auto bg-arenaCard border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+      <div class="text-center">
+        <span class="text-3xl">🎯</span>
+        <h2 class="font-display font-black text-2xl text-white mt-1">JOIN SHOWDOWN</h2>
+        <p class="text-xs text-slate-400 font-mono">Connect directly to host screen</p>
+      </div>
+
+      <div class="space-y-3.5">
+        <div>
+          <label class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block mb-1">ROOM PIN</label>
+          <input type="text" id="input-player-pin" maxlength="4" placeholder="e.g. ABCD" class="w-full bg-slate-900 border-2 border-slate-700 rounded-2xl px-4 py-3 font-mono text-3xl text-center font-black tracking-widest uppercase text-white focus:outline-none focus:border-cobalt">
+        </div>
+
+        <div>
+          <label class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block mb-1">YOUR NAME</label>
+          <input type="text" id="input-player-name" maxlength="15" placeholder="e.g. Alex" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 font-sans font-bold text-sm text-center text-white focus:outline-none focus:border-cobalt">
+        </div>
+
+        <div>
+          <label class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block mb-1.5">TEAM / SQUAD NAME (ANY NAME)</label>
+          <input type="text" id="input-custom-team-name" maxlength="18" placeholder="e.g. Cyber Eagles / Alpha" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 font-sans font-black text-sm text-center text-amber focus:outline-none focus:border-amber uppercase">
+          <p class="text-[10px] text-slate-400 mt-1 text-center">Type any new team name, or select from active squads below:</p>
+          <div id="player-existing-teams-list" class="flex flex-wrap gap-1.5 justify-center mt-2 max-h-24 overflow-y-auto"></div>
+        </div>
+
+        <button id="btn-player-connect" onclick="connectMobilePlayer()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald to-teal-500 font-display font-black text-base text-slate-950 uppercase tracking-wider shadow-emeraldGlow transition-all active:scale-95 flex items-center justify-center gap-2">
+          <span>CONNECT & ENTER ARENA</span> <span>🚀</span>
+        </button>
+
+        <p id="player-connect-status" class="text-[11px] font-mono text-center text-slate-400 min-h-[1rem]"></p>
+      </div>
+    </div>
+
+    <!-- Player Step 2: Active Battle Stage -->
+    <div id="player-active-screen" class="hidden flex-1 flex flex-col justify-between py-2 gap-3">
+      
+      <!-- Top Status Header -->
+      <div class="flex items-center justify-between bg-arenaCard/90 border border-slate-800 rounded-2xl px-4 py-2.5 shadow-lg">
+        <div class="flex items-center gap-2">
+          <span id="player-hud-indicator" class="w-3.5 h-3.5 rounded-full bg-crimson shadow-md"></span>
+          <div>
+            <span id="player-hud-team-title" class="font-display font-black text-sm tracking-wide text-white block leading-none">TEAM ALPHA</span>
+            <span id="player-hud-player-name" class="text-[10px] font-mono text-slate-400">Player</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <span class="text-[9px] font-mono text-slate-400 block uppercase">STATUS</span>
+          <span id="player-net-badge" class="font-mono font-bold text-xs text-emerald flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-emerald animate-pulse"></span> Connected
+          </span>
+        </div>
+      </div>
+
+      <!-- Scrambled Words Display on Phone -->
+      <div class="bg-arenaCard/90 border border-slate-800 rounded-2xl p-3 text-center shadow-lg space-y-1.5">
+        <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+          <span id="player-cat-pill">CATEGORY: SKILLS</span>
+          <span id="player-pos-pill" class="italic">noun</span>
+        </div>
+
+        <div id="player-scramble-shelf" class="flex flex-wrap items-center justify-center gap-1 py-1"></div>
+
+        <p id="player-meaning-hint" class="text-xs text-amber font-medium hidden">
+          Hint: Project cutoff deadline
+        </p>
+      </div>
+
+      <!-- Dynamic Interaction Arena -->
+      <div id="player-interactive-stage" class="my-auto flex flex-col items-center justify-center text-center gap-3 w-full">
+        
+        <!-- PHASE 1 - STATE A: BUZZER BUTTON -->
+        <div id="player-buzzer-container" class="flex flex-col items-center justify-center w-full">
+          <button id="giant-phone-buzzer" onclick="triggerMobileBuzzerTap()" class="w-56 h-56 rounded-full border-8 border-slate-700 bg-slate-800 text-white font-display font-black text-2xl shadow-2xl flex flex-col items-center justify-center gap-1 select-none transition-all buzzer-pulse active:scale-90">
+            <span class="text-4xl">⚡</span>
+            <span>BUZZ!</span>
+            <span class="text-[10px] font-mono uppercase tracking-widest opacity-80">TAP TO SOLVE</span>
+          </button>
+          <p id="player-buzz-status-text" class="text-xs font-mono text-slate-400 mt-3">Be first to buzz and unlock word input!</p>
+        </div>
+
+        <!-- PHASE 1 - STATE B: TYPE UNSCRAMBLED WORD -->
+        <div id="player-input-container" class="hidden w-full bg-slate-900 border-2 border-emerald rounded-3xl p-5 shadow-emeraldGlow space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-1 rounded-lg bg-emerald/20 text-emerald font-mono font-bold text-xs uppercase flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald animate-ping"></span> PHASE 1: UNSCRAMBLE
+            </span>
+            <span id="player-input-timer" class="font-mono font-black text-2xl text-amber">15s</span>
+          </div>
+
+          <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div id="player-timer-bar" class="h-full bg-amber transition-all duration-300" style="width: 100%;"></div>
+          </div>
+
+          <p class="text-xs text-slate-300 text-left">Type unscrambled word (mirrors to host):</p>
+
+          <form onsubmit="submitPlayerTypedAnswer(event)" class="space-y-3">
+            <input 
+              type="text" 
+              id="player-typed-input" 
+              autocomplete="off" 
+              autocapitalize="characters" 
+              spellcheck="false" 
+              placeholder="TYPE WORD HERE..." 
+              class="w-full bg-slate-950 border-2 border-emerald rounded-2xl px-4 py-3 font-mono font-black text-2xl text-center uppercase tracking-widest text-emerald focus:outline-none focus:ring-4 focus:ring-emerald/40 shadow-inner"
+              oninput="handleTypingStream(this.value)"
+            />
+
+            <button type="submit" id="btn-submit-answer" class="w-full py-3.5 rounded-2xl bg-emerald hover:brightness-110 font-display font-black text-slate-950 text-base uppercase tracking-wider shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+              <span>SUBMIT WORD (+1 PT)</span> <span>🚀</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- PHASE 2: GRAMMAR-CHECKED SENTENCE BONUS ROUND -->
+        <div id="player-sentence-container" class="hidden w-full bg-slate-900 border-2 border-cobalt rounded-3xl p-5 shadow-cobaltGlow space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-1 rounded-lg bg-cobalt/20 text-cobalt font-mono font-bold text-xs uppercase flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cobalt animate-ping"></span> PHASE 2: GRAMMATICAL SENTENCE
+            </span>
+            <span id="player-sentence-timer" class="font-mono font-black text-2xl text-amber">30s</span>
+          </div>
+
+          <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div id="player-sentence-timer-bar" class="h-full bg-cobalt transition-all duration-300" style="width: 100%;"></div>
+          </div>
+
+          <div class="text-left bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 text-xs">
+            <span class="text-slate-400">Target Word: </span>
+            <strong id="player-sentence-target-word" class="text-emerald font-mono font-black">---</strong>
+            <p class="text-[11px] text-slate-300 mt-1">Construct a complete, grammatically sound sentence using the word to earn the +1 bonus!</p>
+          </div>
+
+          <form onsubmit="submitPlayerTypedSentence(event)" class="space-y-3">
+            <textarea 
+              id="player-sentence-input" 
+              rows="3" 
+              placeholder="e.g. We met the strict project deadline on Friday." 
+              class="w-full bg-slate-950 border-2 border-cobalt rounded-2xl p-3 font-sans font-medium text-sm text-white focus:outline-none focus:ring-4 focus:ring-cobalt/40 shadow-inner resize-none"
+              oninput="handleSentenceTypingStream(this.value)"
+            ></textarea>
+
+            <!-- Live Grammar Feedback Banner on Phone -->
+            <div id="player-sentence-feedback" class="hidden p-2 rounded-xl bg-rose-950/80 border border-rose-700 text-rose-300 text-xs font-mono text-left"></div>
+
+            <button type="submit" id="btn-submit-sentence" class="w-full py-3 rounded-2xl bg-gradient-to-r from-cobalt to-blue-600 hover:brightness-110 font-display font-black text-white text-sm uppercase tracking-wider shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+              <span>VALIDATE & SUBMIT SENTENCE</span> <span>✍️</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- SPECTATING / LOCKED OUT STATE -->
+        <div id="player-locked-container" class="hidden bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-2 max-w-xs w-full">
+          <span class="text-4xl block">🔒</span>
+          <h4 id="player-locked-title" class="font-display font-bold text-lg text-white">OTHER TEAM IS ACTIVE</h4>
+          <p id="player-locked-desc" class="text-xs text-slate-400 font-mono">Watch the projector screen!</p>
+        </div>
+
+      </div>
+
+      <!-- Mobile Footer Points -->
+      <div class="bg-arenaCard/90 border border-slate-800 rounded-xl py-2 px-3 text-center flex items-center justify-between text-xs font-mono text-slate-400">
+        <span>TEAM POINTS:</span>
+        <strong id="player-my-score" class="text-amber text-lg font-black">0</strong>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 3. HOST / PROJECTOR ARENA VIEW                           -->
+  <!-- ======================================================== -->
+  <div id="view-host" class="hidden flex-1 flex flex-col justify-between p-3 sm:p-5 max-w-7xl mx-auto w-full gap-4">
+    
+    <!-- Top Header -->
+    <header class="w-full bg-arenaCard/95 border border-slate-800 rounded-3xl px-4 sm:px-6 py-3 shadow-2xl flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-crimson via-amber to-cobalt p-0.5 shadow-lg flex items-center justify-center font-display font-black text-xl text-white">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-display font-black text-lg sm:text-xl text-white tracking-wider">WORD UNTANGLE</h1>
+            <span class="px-2 py-0.5 rounded-md bg-cobalt/20 text-cobalt font-mono text-[10px] font-black border border-cobalt/40">GRAMMAR CHECK ENABLED</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Phase 1: Buzz & Solve • Phase 2: Live Grammar Validation</p>
+        </div>
+      </div>
+
+      <!-- Room PIN & Connection Count -->
+      <div class="flex items-center gap-2.5 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 shadow-inner">
+        <div>
+          <span class="text-[9px] font-mono text-slate-400 uppercase font-bold block">ROOM PIN</span>
+          <span id="host-pin-label" class="font-mono font-black text-2xl text-amber tracking-widest leading-none">----</span>
+        </div>
+        <div class="h-8 w-px bg-slate-700"></div>
+        <div>
+          <span class="text-[9px] font-mono text-slate-400 uppercase font-bold block">PLAYERS / SQUADS</span>
+          <span id="host-conn-count" class="font-mono font-bold text-sm text-emerald">0 Live (0 Squads)</span>
+        </div>
+        <button onclick="toggleQRModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-white transition-all flex items-center gap-1.5 border border-slate-600">
+          <span>📲</span> <span>QR</span>
+        </button>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center gap-2">
+        <button onclick="toggleFullscreen()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-slate-200 border border-slate-700 transition-all">
+          🖥️ Full
+        </button>
+        <button onclick="toggleSoundFx()" id="btn-sound-toggle" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono font-bold text-slate-200 border border-slate-700 transition-all">
+          🔊 Sound ON
+        </button>
+        <button onclick="resetTournamentScores()" class="px-2.5 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-xs font-mono font-bold border border-rose-700/60 transition-all" title="Reset Scores">
+          🔄 Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- N TEAMS DYNAMIC SCOREBOARD -->
+    <section>
+      <div class="flex items-center justify-between pb-1.5 px-1">
+        <span class="text-xs font-mono uppercase tracking-widest text-slate-400">ACTIVE SQUADS LEADERBOARD:</span>
+        <button onclick="promptHostAddTeam()" class="text-xs font-mono text-cobalt hover:underline">+ Add Team</button>
+      </div>
+      <div id="dynamic-podiums-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2.5"></div>
+    </section>
+
+    <!-- FACILITATOR MANUAL BUZZ BAR -->
+    <div id="host-buzzer-quick-bar" class="bg-slate-900/90 border border-slate-800 rounded-2xl px-3 py-2 flex flex-wrap items-center gap-2 shadow-inner">
+      <span class="text-[11px] font-mono text-slate-400 uppercase font-black shrink-0">🎮 MANUAL BUZZ:</span>
+      <div id="host-manual-buzz-buttons" class="flex flex-wrap gap-1.5 items-center"></div>
+    </div>
+
+    <!-- MAIN GAME STAGE -->
+    <main class="bg-arenaCard/95 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl flex flex-col justify-between gap-4 relative overflow-hidden flex-1 shadow-neonCenter">
+      
+      <!-- Category & Hint Pills -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <span class="px-3 py-1 rounded-xl bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+            ROUND <span id="host-current-round-text" class="text-amber">1</span> / <span id="host-total-rounds-text">40</span>
+          </span>
+          <span id="host-category-pill" class="px-3 py-1 rounded-xl bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-bold font-mono">
+            CATEGORY: PROFESSIONAL SKILLS
+          </span>
+          <span id="host-pos-pill" class="px-2.5 py-1 rounded-lg bg-slate-900 text-slate-400 text-xs font-mono italic">
+            noun
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-hint-letter" onclick="revealFirstLetterHint()" class="px-3.5 py-1.5 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-600/70 text-amber-300 font-mono text-xs font-bold transition-all flex items-center gap-1.5">
+            <span>💡</span> <span>Reveal 1st Letter</span>
+          </button>
+          <button id="btn-hint-meaning" onclick="toggleMeaningHint()" class="px-3.5 py-1.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-blue-600/70 text-blue-300 font-mono text-xs font-bold transition-all flex items-center gap-1.5">
+            <span>📖</span> <span>Show Meaning</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrambled Letter Cards -->
+      <div class="py-1 text-center flex flex-col items-center justify-center gap-2">
+        <div id="scrambled-letters-shelf" class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 max-w-5xl"></div>
+
+        <div id="word-definition-display" class="hidden text-slate-300 text-sm sm:text-base font-medium max-w-2xl text-center px-4 py-2 bg-slate-900/80 border border-slate-800 rounded-2xl">
+          <span class="text-amber font-mono font-bold">DEFINITION:</span> <span id="word-definition-text">---</span>
+        </div>
+      </div>
+
+      <!-- CALLOUT PANEL: ACTION STATUS & LIVE STREAMS -->
+      <div id="host-callout-panel" class="w-full bg-slate-900/95 border-2 border-slate-700 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all">
+        
+        <div class="flex items-center gap-4 flex-1">
+          <div id="host-callout-icon" class="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center text-3xl shadow-lg shrink-0">
+            ⚡
+          </div>
+          <div class="w-full">
+            <div id="host-callout-title" class="font-display font-black text-xl sm:text-2xl text-white">
+              BUZZERS LIVE! WHO WILL UNJUMBLE FIRST?
+            </div>
+            <div id="host-callout-desc" class="text-xs sm:text-sm text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+              <span>First team to buzz gets typing unlocked on their device.</span>
+            </div>
+            
+            <!-- Phase 1 Live Word Mirror -->
+            <div id="host-live-typing-stream" class="hidden mt-2.5 flex items-center gap-3 bg-slate-950 border-2 border-emerald/50 rounded-2xl px-4 py-2 font-mono shadow-inner max-w-xl">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">WORD TYPING:</span>
+              <span id="host-streamed-text" class="text-emerald font-black tracking-widest text-xl sm:text-2xl">...</span>
+            </div>
+
+            <!-- Phase 2 Live Sentence Mirror + Grammar Evaluation -->
+            <div id="host-live-sentence-stream" class="hidden mt-2.5 bg-slate-950 border-2 border-cobalt/60 rounded-2xl px-4 py-2.5 max-w-2xl space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-mono font-bold text-cobalt uppercase tracking-widest block">PHASE 2: LIVE SENTENCE INPUT</span>
+                <span id="host-grammar-verdict-badge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">ANALYZING GRAMMAR</span>
+              </div>
+              <p id="host-streamed-sentence-text" class="text-white font-sans text-sm italic">Waiting for team to type sentence...</p>
+              <p id="host-grammar-feedback-text" class="text-xs font-mono text-amber hidden"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timer -->
+        <div class="flex items-center gap-3 shrink-0">
+          <div class="text-right">
+            <span id="clock-status-label" class="text-[10px] font-mono text-slate-400 uppercase tracking-widest block font-bold">COUNTDOWN</span>
+            <div id="host-digital-clock" class="font-mono font-black text-4xl sm:text-6xl text-amber">
+              --
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOST CONTROLS -->
+      <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-host-accept" onclick="hostManualAccept()" disabled class="px-3.5 py-2.5 rounded-2xl bg-emerald/90 hover:bg-emerald text-slate-950 font-display font-black text-xs uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed shadow-emeraldGlow transition-all">
+            ✅ Accept Word (+1)
+          </button>
+
+          <button id="btn-host-reject" onclick="hostManualRejectAndReopen()" disabled class="px-3.5 py-2.5 rounded-2xl bg-rose-950 hover:bg-rose-900 border-2 border-rose-600 text-rose-300 font-display font-black text-xs uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            ❌ Reject / Re-open Buzzer
+          </button>
+
+          <!-- Host override button to grant sentence point manually if desired -->
+          <button id="btn-host-sentence-bonus" onclick="hostAwardSentenceBonus()" disabled class="px-3.5 py-2.5 rounded-2xl bg-cobalt text-slate-950 font-display font-black text-xs uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 shadow-cobaltGlow transition-all">
+            ✍️ Override & Award Sentence (+1 PT)
+          </button>
+        </div>
+
+        <button onclick="advanceToNextWord()" class="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber to-yellow-500 text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase hover:brightness-110 shadow-amberGlow transition-all flex items-center gap-2 active:scale-95">
+          <span>NEXT WORD</span> <span>➡️</span>
+        </button>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- QR CODE MODAL -->
+  <div id="modal-qr-popup" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-arenaCard border-2 border-cobalt/80 w-full max-w-sm rounded-3xl p-6 text-center space-y-4 shadow-cobaltGlow">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+        <h3 class="font-display font-black text-lg text-white">SCAN TO CONNECT BUZZER</h3>
+        <button onclick="toggleQRModal()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl inline-block shadow-inner">
+        <div id="qrcode-target"></div>
+      </div>
+
+      <div>
+        <p class="text-xs text-slate-400 font-mono">Or enter PIN manually on phone:</p>
+        <span id="qr-modal-pin-text" class="font-mono font-black text-3xl text-amber tracking-widest block mt-1">ABCD</span>
+      </div>
+
+      <button onclick="toggleQRModal()" class="w-full py-2.5 rounded-xl bg-slate-800 text-slate-200 font-mono text-xs font-bold hover:bg-slate-700">
+        Done / Close
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ========================================================
+    // 1. VOCABULARY BANK
+    // ========================================================
+    const WORD_BANK = [
+      { word: 'DEADLINE', category: 'Time Management', pos: 'noun', def: 'The latest time or date by which a project or task must be completed.' },
+      { word: 'FEEDBACK', category: 'Growth & Appraisal', pos: 'noun', def: 'Constructive critique and evaluative information given to improve performance.' },
+      { word: 'NEGOTIATE', category: 'Deal Making', pos: 'verb', def: 'To confer with another so as to arrive at the settlement of some matter.' },
+      { word: 'ESCALATE', category: 'Client Communication', pos: 'verb', def: 'To raise a critical dispute or bottleneck to higher executive authority.' },
+      { word: 'FEASIBLE', category: 'Strategy & Analysis', pos: 'adjective', def: 'Capable of being done, effected, or accomplished conveniently.' },
+      { word: 'COMPROMISE', category: 'Diplomacy', pos: 'noun', def: 'Settlement of differences by mutual concessions.' },
+      { word: 'BENCHMARK', category: 'Quality Standards', pos: 'noun', def: 'A standard against which others may be measured or judged.' },
+      { word: 'STRATEGY', category: 'Leadership', pos: 'noun', def: 'A careful plan or method devised to achieve a specific long-term goal.' },
+      { word: 'PRIORITIZE', category: 'Workplace Skills', pos: 'verb', def: 'To arrange in order of importance or urgency.' },
+      { word: 'INTEGRITY', category: 'Ethics', pos: 'noun', def: 'The quality of being honest and adhering to moral principles.' },
+      { word: 'DELIVERABLE', category: 'Project Management', pos: 'noun', def: 'A tangible or intangible good or service produced as a result of a project.' },
+      { word: 'RESOLUTION', category: 'Problem Solving', pos: 'noun', def: 'The act of resolving a difficult problem, dispute, or conflict.' },
+      { word: 'PERSUASION', category: 'Influence', pos: 'noun', def: 'The act of successfully convincing someone to believe or do something.' },
+      { word: 'COLLABORATE', category: 'Teamwork', pos: 'verb', def: 'To work together with others to achieve a common goal.' },
+      { word: 'PRECISION', category: 'Execution', pos: 'noun', def: 'The quality of being accurate, definite, or exact.' },
+      { word: 'RESILIENCE', category: 'Professional Mindset', pos: 'noun', def: 'The ability to recover quickly from setbacks and challenges.' },
+      { word: 'EMPOWER', category: 'Leadership', pos: 'verb', def: 'To give someone the authority or confidence to make decisions.' },
+      { word: 'METICULOUS', category: 'Attention to Detail', pos: 'adjective', def: 'Showing extreme care about minute details; precise and thorough.' },
+      { word: 'INNOVATION', category: 'Product Thinking', pos: 'noun', def: 'The creation and introduction of new methods, ideas, or products.' },
+      { word: 'TRANSPARENCY', category: 'Corporate Culture', pos: 'noun', def: 'The quality of being open, honest, and easy to perceive or detect.' },
+      { word: 'DELEGATE', category: 'Management', pos: 'verb', def: 'To entrust a task or responsibility to another person, typically a subordinate.' },
+      { word: 'FACILITATE', category: 'Operations', pos: 'verb', def: 'To make an action or process easy or easier.' },
+      { word: 'SYNERGY', category: 'Collaboration', pos: 'noun', def: 'The interaction of elements that when combined produce a total effect greater than the sum.' },
+      { word: 'MILESTONE', category: 'Project Tracking', pos: 'noun', def: 'A significant stage or event in the development of something.' },
+      { word: 'COMPLIANCE', category: 'Corporate Governance', pos: 'noun', def: 'The action or fact of adhering to a set of rules, laws, or guidelines.' },
+      { word: 'STAKEHOLDER', category: 'Business Relations', pos: 'noun', def: 'A person or group with an interest or concern in something.' },
+      { word: 'CONSENSUS', category: 'Decision Making', pos: 'noun', def: 'A general agreement arrived at by a group.' },
+      { word: 'OPTIMIZE', category: 'Productivity', pos: 'verb', def: 'To make the best or most effective use of a situation or resource.' },
+      { word: 'ADAPTABLE', category: 'Soft Skills', pos: 'adjective', def: 'Able to adjust to new conditions or unexpected changes.' },
+      { word: 'EFFICIENCY', category: 'Operations', pos: 'noun', def: 'The ability to achieve an end goal with little to no wasted effort.' }
+    ];
+
+    function scrambleString(word) {
+      const arr = word.split('');
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      const res = arr.join('');
+      return (res === word && word.length > 2) ? scrambleString(word) : res;
+    }
+
+    const TEAM_PALETTES = [
+      { border: 'border-crimson', glow: 'shadow-crimsonGlow', text: 'text-crimson', bg: 'bg-crimson/15', color: '#ff2257' },
+      { border: 'border-cobalt', glow: 'shadow-cobaltGlow', text: 'text-cobalt', bg: 'bg-cobalt/15', color: '#00d2ff' },
+      { border: 'border-emerald', glow: 'shadow-emeraldGlow', text: 'text-emerald', bg: 'bg-emerald/15', color: '#00f576' },
+      { border: 'border-amber', glow: 'shadow-amberGlow', text: 'text-amber', bg: 'bg-amber/15', color: '#ffb300' },
+      { border: 'border-violet-500', glow: 'shadow-purple-500/50', text: 'text-violet-400', bg: 'bg-purple-900/30', color: '#c084fc' },
+      { border: 'border-rose-400', glow: 'shadow-rose-500/50', text: 'text-rose-400', bg: 'bg-rose-900/30', color: '#fb7185' },
+      { border: 'border-teal-400', glow: 'shadow-teal-500/50', text: 'text-teal-400', bg: 'bg-teal-900/30', color: '#2dd4bf' },
+      { border: 'border-orange-400', glow: 'shadow-orange-500/50', text: 'text-orange-400', bg: 'bg-orange-900/30', color: '#fb923c' }
+    ];
+
+    function getTeamPalette(teamIndex) {
+      return TEAM_PALETTES[teamIndex % TEAM_PALETTES.length];
+    }
+
+    // ========================================================
+    // 2. GRAMMAR & SYNTAX ENGINE (LOCAL HEURISTICS + FREE API)
+    // ========================================================
+    const VERB_DICTIONARY = new Set([
+      'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+      'do', 'does', 'did', 'will', 'would', 'shall', 'should', 'can', 'could', 'may',
+      'might', 'must', 'need', 'needs', 'needed', 'want', 'wants', 'wanted', 'make',
+      'makes', 'made', 'take', 'takes', 'took', 'taken', 'get', 'gets', 'got', 'give',
+      'gives', 'gave', 'given', 'work', 'works', 'worked', 'working', 'help', 'helps',
+      'helped', 'helping', 'lead', 'leads', 'led', 'meet', 'meets', 'met', 'meeting',
+      'plan', 'plans', 'planned', 'planning', 'reach', 'reaches', 'reached', 'create',
+      'creates', 'created', 'deliver', 'delivers', 'delivered', 'negotiate', 'negotiates',
+      'negotiated', 'escalate', 'escalates', 'escalated', 'prioritize', 'prioritizes',
+      'prioritized', 'collaborate', 'collaborates', 'collaborated', 'empower', 'empowers',
+      'empowered', 'delegate', 'delegates', 'delegated', 'facilitate', 'facilitates',
+      'facilitated', 'optimize', 'optimizes', 'optimized', 'achieve', 'achieves',
+      'achieved', 'provide', 'provides', 'provided', 'ensure', 'ensures', 'ensured',
+      'maintain', 'maintains', 'maintained', 'follow', 'follows', 'followed', 'set',
+      'sets', 'setting', 'show', 'shows', 'showed', 'shown', 'keep', 'keeps', 'kept'
+    ]);
+
+    function evaluateLocalGrammarRules(text, targetWord) {
+      const clean = (text || '').trim();
+      const words = clean.split(/\s+/).filter(Boolean);
+
+      if (words.length < 4) {
+        return { valid: false, reason: 'Sentence is too short (minimum 4 words required).' };
+      }
+
+      // 1. Capitalization check
+      const firstChar = clean.charAt(0);
+      if (firstChar !== firstChar.toUpperCase() || !/[A-Z]/.test(firstChar)) {
+        return { valid: false, reason: 'Sentence must start with a capital letter.' };
+      }
+
+      // 2. Terminal punctuation check
+      const lastChar = clean.charAt(clean.length - 1);
+      if (!['.', '!', '?'].includes(lastChar)) {
+        return { valid: false, reason: 'Sentence must end with punctuation (. ! or ?).' };
+      }
+
+      // 3. Target word inclusion
+      const upperTarget = targetWord.toUpperCase();
+      const upperText = clean.toUpperCase();
+      const wordRegex = new RegExp(`\\b${upperTarget}\\b`, 'i');
+      if (!wordRegex.test(upperText) && !upperText.includes(upperTarget)) {
+        return { valid: false, reason: `Must contain the target word "${targetWord}".` };
+      }
+
+      // 4. Subject + Predicate Verb Presence
+      const lowerWords = words.map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
+      let hasVerb = lowerWords.some(w => 
+        VERB_DICTIONARY.has(w) || 
+        w.endsWith('ed') || 
+        w.endsWith('ing') || 
+        w.endsWith('es') || 
+        w.endsWith('ize') || 
+        w.endsWith('ized')
+      );
+
+      if (!hasVerb) {
+        return { valid: false, reason: 'Incomplete sentence structure (missing main verb/predicate).' };
+      }
+
+      // 5. Repeated words error detection (e.g. "the the", "we we")
+      for (let i = 0; i < lowerWords.length - 1; i++) {
+        if (lowerWords[i] && lowerWords[i] === lowerWords[i + 1] && !['that', 'had'].includes(lowerWords[i])) {
+          return { valid: false, reason: `Repeated word detected: "${lowerWords[i]} ${lowerWords[i]}".` };
+        }
+      }
+
+      // 6. Basic Subject-Verb Agreement checks
+      const joined = lowerWords.join(' ');
+      if (/\b(he|she|it)\s+(are|were|have)\b/.test(joined)) {
+        return { valid: false, reason: 'Subject-verb agreement error with singular subject.' };
+      }
+      if (/\b(they|we|you)\s+(is|was|has)\b/.test(joined)) {
+        return { valid: false, reason: 'Subject-verb agreement error with plural subject.' };
+      }
+      if (/\b(a)\s+[aeiou]\w+/i.test(clean)) {
+        return { valid: false, reason: 'Article error: Use "an" before vowel sounds.' };
+      }
+
+      return { valid: true, reason: 'Grammatically sound!' };
+    }
+
+    async function checkGrammarComprehensive(text, targetWord) {
+      // 1. Run strict instant local heuristic rules
+      const localResult = evaluateLocalGrammarRules(text, targetWord);
+      if (!localResult.valid) {
+        return localResult;
+      }
+
+      // 2. Try LanguageTool Public API for deep spelling/grammar analysis
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2600); // Fast 2.6s fallback
+
+        const params = new URLSearchParams();
